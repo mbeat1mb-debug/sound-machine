@@ -26,12 +26,19 @@ export class Engine {
   constructor(audioEl) {
     this.audioEl = audioEl;
     this.ctx = null;
-    this.master = null;
+    this.master = null;       // volume (slider)
+    this.fade = null;         // timer fade — separate node so the slider's
+                              // setTargetAtTime can't cancel a scheduled fade
     this.current = null;      // { id, node, gain }
     this.buffers = new Map(); // id -> AudioBuffer (loop-ready)
     this.volume = 0.8;
     this.playing = false;
     this.onchange = null;     // UI callback
+    // Sleep timer
+    this.timerMinutes = 0;    // 0 = Off (play until stopped)
+    this.timerEndsAt = null;  // wall-clock ms, for the UI countdown
+    this.timerTimeout = null;
+    this.fadeSeconds = 15;    // SPEC fade length; tests may shorten
   }
 
   // Must be called from a user gesture the first time (iOS requirement).
@@ -40,12 +47,75 @@ export class Engine {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
       this.master.gain.value = this.volume * this.volume;
+      this.fade = this.ctx.createGain();
       const dest = this.ctx.createMediaStreamDestination();
-      this.master.connect(dest);
+      this.master.connect(this.fade);
+      this.fade.connect(dest);
       this.audioEl.srcObject = dest.stream;
       await this.ctx.audioWorklet.addModule(new URL('./noise-worklet.js', import.meta.url));
+      this.initMediaSession();
+      // Timer chosen before the first tap? Arm it now that audio exists.
+      if (this.timerMinutes > 0) this.setTimer(this.timerMinutes);
     }
     if (this.ctx.state === 'suspended') await this.ctx.resume();
+  }
+
+  // ---- Media Session (lock-screen metadata + controls) ----
+  initMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.setActionHandler('play', () => this.resume());
+    navigator.mediaSession.setActionHandler('pause', () => this.pause());
+  }
+
+  updateMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    if (this.current) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: SOUNDS[this.current.id].label,
+        artist: 'Sound Machine',
+        artwork: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
+      });
+    }
+    navigator.mediaSession.playbackState = this.playing ? 'playing' : 'paused';
+  }
+
+  // ---- Sleep timer: Off/15/30/60/90. The 15 s fade is *scheduled on the
+  // audio clock* at arm time, so it fires even if iOS throttles JS timers
+  // while the screen is locked. The wall-clock timeout just cleans up. ----
+  setTimer(minutes) {
+    this.timerMinutes = minutes;
+    if (this.timerTimeout) { clearTimeout(this.timerTimeout); this.timerTimeout = null; }
+    this.timerEndsAt = null;
+    if (this.fade) {
+      const now = this.ctx.currentTime;
+      this.fade.gain.cancelScheduledValues(now);
+      this.fade.gain.setValueAtTime(1, now);
+      if (minutes > 0) {
+        const total = minutes * 60;
+        const fadeStart = now + Math.max(total - this.fadeSeconds, 0);
+        this.fade.gain.setValueAtTime(1, fadeStart);
+        this.fade.gain.linearRampToValueAtTime(0.0001, fadeStart + Math.min(this.fadeSeconds, total));
+        this.timerEndsAt = Date.now() + total * 1000;
+        this.timerTimeout = setTimeout(() => this.timerExpired(), total * 1000 + 500);
+      }
+    }
+    // if there's no audio context yet, ensureContext() arms it on first tap
+    this.emit();
+  }
+
+  async timerExpired() {
+    this.timerTimeout = null;
+    this.timerEndsAt = null;
+    this.timerMinutes = 0;
+    if (this.playing) await this.pause();
+    if (this.fade) { // silently restore for the next play
+      this.fade.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.fade.gain.setValueAtTime(1, this.ctx.currentTime);
+    }
+    this.emit();
   }
 
   setVolume(v) {
@@ -89,6 +159,7 @@ export class Engine {
     this.current = { id, node, gain };
     this.playing = true;
     await this.audioEl.play();
+    this.updateMediaSession();
     this.emit();
   }
 
@@ -111,6 +182,7 @@ export class Engine {
     this.playing = false;
     this.audioEl.pause();
     await this.ctx.suspend();
+    this.updateMediaSession();
     this.emit();
   }
 
@@ -119,6 +191,7 @@ export class Engine {
     await this.ctx.resume();
     await this.audioEl.play();
     this.playing = true;
+    this.updateMediaSession();
     this.emit();
   }
 

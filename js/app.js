@@ -38,6 +38,19 @@ volumeSlider.addEventListener('input', () => {
   engine.setVolume(parseFloat(volumeSlider.value));
 });
 
+// Sleep timer selector (Off / 15 / 30 / 60 / 90)
+const timerButtons = [...document.querySelectorAll('.tmr')];
+for (const btn of timerButtons) {
+  btn.addEventListener('click', () => engine.setTimer(parseInt(btn.dataset.min, 10)));
+}
+
+function timerStatusText() {
+  if (!engine.timerEndsAt) return '';
+  const mins = Math.max(0, Math.ceil((engine.timerEndsAt - Date.now()) / 60000));
+  return mins > 1 ? `Stops in about ${mins} minutes` : 'Stopping soon';
+}
+setInterval(() => { statusEl.textContent = timerStatusText(); }, 15000);
+
 engine.onchange = () => {
   const currentId = engine.current ? engine.current.id : null;
   for (const [id, btn] of buttons) {
@@ -46,6 +59,10 @@ engine.onchange = () => {
   }
   playPauseBtn.disabled = !currentId;
   playPauseBtn.textContent = engine.playing ? 'Pause' : 'Play';
+  for (const btn of timerButtons) {
+    btn.classList.toggle('active', parseInt(btn.dataset.min, 10) === engine.timerMinutes);
+  }
+  statusEl.textContent = timerStatusText();
 };
 
 engine.setVolume(parseFloat(volumeSlider.value));
