@@ -1,7 +1,11 @@
 # STATE — Sound Machine PWA
 
 ## Current phase
-Phase 1 (audio engine) — code complete, **awaiting on-device iPhone verification** (the phase gate).
+Phase 1 (audio engine) — complete; user confirmed working on iPhone ("looks
+good") via https://raw.githack.com/mbeat1mb-debug/sound-machine/main/index.html
+(repo made public by user; githack CDN is interim hosting until Phase 4's
+proper deploy). Extended 5-min loop listening not explicitly confirmed.
+User re-confirmed timer requirements (Phase 3): Off default + 15/30/60/90.
 
 ## Done
 - Audio graph per SPEC: source → per-sound gain → master gain → MediaStreamAudioDestinationNode → `<audio>` element. AudioContext + `audio.play()` only from user tap.
