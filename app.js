@@ -80,11 +80,12 @@ const KEY_STORE = 'dugout-key';
 const normKey = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function readKey() {
   let k = '';
-  try { k = new URLSearchParams(location.search).get('k') || ''; } catch (e) {}
+  let out = false; try { out = localStorage.getItem('dugout-out') === '1'; } catch (e) {}
+  if (!out) { try { k = new URLSearchParams(location.search).get('k') || ''; } catch (e) {} }
   if (!k) { try { k = localStorage.getItem(KEY_STORE) || ''; } catch (e) {} }
   return normKey(k);
 }
-function storeKey(k) { try { localStorage.setItem(KEY_STORE, k); } catch (e) {} }
+function storeKey(k) { try { localStorage.setItem(KEY_STORE, k); localStorage.removeItem('dugout-out'); } catch (e) {} }
 function forgetKey() { try { localStorage.removeItem(KEY_STORE); } catch (e) {} }
 let familyKey = '', polling = false;
 // The page talks straight to the database's own functions; every one checks the family code itself.
@@ -120,6 +121,8 @@ function dbMsg(e) {
 async function addEntry(obj) {
   const e = Object.assign({ ts: Date.now() }, obj), media = Array.isArray(e.thumbs) ? { thumbs: e.thumbs } : null;
   delete e.thumbs; delete e.id;
+  if (e.date && e.date > today()) { toast('That date is in the future. Pick today or an earlier day.'); return false; }
+  if (e.date && !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) { toast('Pick a date first.'); return false; }
   try {
     const row = await api('add', { ts: e.ts, data: e, media });
     state.entries = [Object.assign({}, e, { id: row.id })].concat(state.entries);
@@ -155,6 +158,7 @@ async function load() {
     const d = await api('load');
     state.entries = (d.entries || []).map(r => Object.assign({}, r.data, { id: r.id, ts: r.ts }));
     if (d.settings) state.settings = mergeSettings(d.settings);
+    state.cut = d.total > state.entries.length;
     state.dbState = 'live';
   } catch (err) {
     if (err.code === 'denied') { state.needKey = true; state.keyMsg = 'This device needs the family code again.'; }
@@ -212,8 +216,8 @@ async function boot() {
 function banner() {
   const m = { none: 'The hub could not be reached. Check the internet connection; it tries again every minute.',
     stale: 'Showing what was loaded last. The hub could not be reached just now.',
-    slow: 'Still reaching the saved data. What you see may be out of date.',
-    readonly: 'This account can view the hub but cannot save to it.' }[state.dbState];
+    slow: 'Still reaching the saved data. What you see may be out of date.' }[state.dbState];
+  if (!m && state.cut) return h('p', { class: 'note' }, 'Only the newest 20,000 entries are loaded, so some old totals may read low. Tell Claude to raise the limit.');
   return m ? h('p', { class: 'note' }, m) : null;
 }
 function inp(key, label, o) {
@@ -494,7 +498,7 @@ function viewLog() {
     e.kind === 'pitch' ? 'Pitched: ' + e.pitches + ' pitches, ' + L.fmtInnings(e.outs || 0) + ' innings' : e.kind === 'strength' ? 'Test: jump ' + fix(e.jump, 0) + ' in, ' + fix(e.pushups, 0) + ' push-ups, plank ' + fix(e.plank, 0) + ' sec' :
     e.kind === 'session' ? (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'Session') + ' (' + ((L.FOCUS[e.focus] || {}).name || e.focus) + ')' : e.kind === 'analysis' ? 'Filmstrip: ' + (str(e.fix && e.fix.title, 60) || 'no note') :
     e.kind === 'velo' ? 'Pitch speed' + (e.where === 'game' ? ' (game)' : '') + ': ' + [L.isNum(e.avg) ? 'average ' + fix(e.avg) : null, L.isNum(e.max) ? 'fastest ' + fix(e.max) : null].filter(Boolean).join(', ') + ' mph' :
-    e.kind === 'body' ? 'Measured: ' + [L.isNum(e.heightIn) ? L.fmtHeight(e.heightIn) : null, L.isNum(e.weightLb) ? fix(e.weightLb) + ' lb' : null].filter(Boolean).join(', ') : e.kind;
+    e.kind === 'body' ? 'Measured: ' + [L.isNum(e.heightIn) ? L.fmtHeight(e.heightIn) : null, L.isNum(e.weightLb) ? (Math.round(e.weightLb * 10) / 10) + ' lb' : null].filter(Boolean).join(', ') : e.kind;
   return page(strip('Log ' + who() + "'s work", 'Finished sessions log their own reps. Use this for extra work, speeds and games.'),
     h('section', { class: 'sec plain' }, h('div', { class: 'row between' }, h('h2', null, 'Today'), h('div', { style: 'flex:0 1 200px' }, inp('q_date', 'Date', { type: 'date', def: t }))),
       h('h3', null, 'Extra reps (outside sessions)'),
@@ -576,6 +580,7 @@ function viewArm() {
         if (av == null && mx == null) return toast('Enter the average or the fastest pitch.');
         if ([av, mx].some(v => v != null && (v < 10 || v > 100))) return toast('That speed looks off. Check it is in miles per hour.');
         if (av != null && mx != null && mx < av) return toast('Fastest cannot be lower than the average.');
+        if (num('v_n') != null && (num('v_n') < 1 || num('v_n') % 1)) return toast('Pitches timed should be a whole number.');
         if (await addEntry({ kind: 'velo', date: state.form.v_date || t, avg: av, max: mx, n: num('v_n'), where: state.form.v_where || 'bullpen' })) { clear('v_avg', 'v_max', 'v_n'); toast('Pitch speed saved.'); } render(); }) }, 'Save pitch speed')),
       h('p', { class: 'small mid' }, 'Use the radar from behind the catcher or the side, the same spot each time. Speed checks do not count toward his pitch limits, so log real pitch counts as an outing above. The chart is on the Progress screen.')),
     h('section', { class: 'sec' }, h('h2', null, 'The rules it follows'),
@@ -694,7 +699,7 @@ function viewGear() {
         h('p', null, 'This device is signed in with the family code. Sign it out if it is lost or no longer used for the hub.'),
         h('div', null, h('button', { type: 'button', class: 'btn ' + (state.confirmDel === 'signout' ? 'del' : 'line'), onclick: () => {
           if (state.confirmDel !== 'signout') { state.confirmDel = 'signout'; render(); return; }
-          state.confirmDel = null; forgetKey(); familyKey = ''; state.entries = []; state.media = {}; state.needKey = true; state.keyMsg = ''; state.keyNet = false; history.replaceState(null, '', location.pathname + '#today'); route(); render(); } },
+          state.confirmDel = null; forgetKey(); try { localStorage.setItem('dugout-out', '1'); } catch (e) {} familyKey = ''; state.entries = []; state.media = {}; state.needKey = true; state.keyMsg = ''; state.keyNet = false; history.replaceState(null, '', location.pathname + '#today'); route(); render(); } },
           state.confirmDel === 'signout' ? 'Tap again to sign out' : 'Sign this device out'))),
       h('section', { class: 'sec' }, h('h2', null, 'Parent code'),
         h('p', null, state.settings.pinHash ? 'A parent code is set. The Coach side and deleting filmstrips ask for it, and it locks again when you switch to the Player side.' : 'No parent code yet. Set one so the Coach side stays with you.'),
