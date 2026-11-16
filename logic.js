@@ -256,7 +256,8 @@ const HubLogic = (() => {
       I('z6', 'Big jumps', '5 big jumps. Stick every landing.')] };
     return {
       A: { title: 'Day 1', sub: 'Hitting + push-ups', min: 25, blocks: [warm, hit, bodyA, log] },
-      B: { title: 'Day 2', sub: 'Hitting + Tidal Tank', min: 25, blocks: [warm, hit, bodyB, log] },
+      // In test week only Day 1 runs the tests; Day 2 is a normal contact practice so he is not maxing out twice.
+      B: { title: 'Day 2', sub: 'Hitting + Tidal Tank', min: 25, blocks: [warm, focus === 'baseline' ? { name: 'Hitting', min: 12, items: hitting('contact') } : hit, bodyB, log] },
       C: { title: 'Day 3', sub: 'Bodyweight only', min: 10, blocks: [bodyC] }
     };
   }

@@ -299,6 +299,7 @@ function viewToday() {
       last && str(last.fix && last.fix.title) ? h('section', { class: 'sec' }, h('h2', null, 'From your last filmstrip'), h('p', { class: 'say' }, str(last.fix && last.fix.title, 80)),
         h('p', null, h('a', { href: '#film' }, 'Open the film room'))) : null),
     h('div', { class: 'stack' },
+      slots.every(s => p.wk.done[s]) ? h('div', { class: 'weekdone' }, h('b', null, 'Week complete!'), h('span', null, 'All 3 days done. A new plan shows up Monday.')) : null,
       h('div', { class: 'stabs', role: 'group', 'aria-label': 'Pick a session' }, slots.map(s => h('button', { type: 'button', 'aria-pressed': String(state.slot === s), onclick: () => { state.slot = s; render(); } },
         p.week[s].title, h('small', null, p.week[s].sub), h('small', null, p.wk.done[s] ? 'Done ✓' : p.week[s].min + ' minutes')))),
       h('div', null, ses.blocks.map(b => [
