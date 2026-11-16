@@ -282,7 +282,7 @@ function plan() {
 }
 const checks = () => state.entries.filter(e => e.kind === 'analysis').sort(L.byDate).reverse();
 function viewToday() {
-  const p = plan(), slots = ['A', 'C', 'B'], F = L.FOCUS[p.pick.focus];
+  const p = plan(), slots = ['A', 'B', 'C'], F = L.FOCUS[p.pick.focus];
   if (!state.slot || !p.week[state.slot]) state.slot = slots.find(s => !p.wk.done[s]) || 'A';
   const ses = p.week[state.slot], tk = p.wk.monday + state.slot;
   const ticks = state.ticks[tk] || (state.ticks[tk] = {}), counts = state.counts[tk] || (state.counts[tk] = {});
@@ -296,7 +296,7 @@ function viewToday() {
         h('p', null, h('a', { href: '#film' }, 'Open the film room'))) : null),
     h('div', { class: 'stack' },
       h('div', { class: 'stabs', role: 'group', 'aria-label': 'Pick a session' }, slots.map(s => h('button', { type: 'button', 'aria-pressed': String(state.slot === s), onclick: () => { state.slot = s; render(); } },
-        p.week[s].title, h('small', null, p.wk.done[s] ? 'Done' : p.week[s].min + ' minutes')))),
+        p.week[s].title, h('small', null, p.week[s].sub), h('small', null, p.wk.done[s] ? 'Done ✓' : p.week[s].min + ' minutes')))),
       h('div', null, ses.blocks.map(b => [
         h('div', { class: 'inning' }, h('span', null, b.name), h('span', { class: 'num' }, b.min + ' min')),
         b.items.map(i => { n++; const on = !!ticks[i.id] || isDone; return [
@@ -489,10 +489,10 @@ function viewLog() {
   const t = today(), recent = state.entries.slice().sort(L.byDate).reverse().slice(0, 25);
   const part = (v, w) => v ? v + ' ' + w : null;
   const label = e => e.kind === 'swing' ? 'Speeds: bat ' + fix(e.batSpeed) + ', exit ' + fix(e.exitVelo) + ' mph' + (e.ball === 'mini' ? ' (mini balls)' : '') :
-    e.kind === 'reps' ? (e.from ? 'Reps from Session ' + (e.slot || '') + ': ' : 'Extra reps: ') + ([part(e.swings, 'swings'), part(e.pushups, 'push-ups'), part(e.situps, 'sit-ups'), part(e.squats, 'squats')].filter(Boolean).join(', ') || 'none') :
+    e.kind === 'reps' ? (e.from ? 'Reps from ' + (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'a session') + ': ' : 'Extra reps: ') + ([part(e.swings, 'swings'), part(e.pushups, 'push-ups'), part(e.situps, 'sit-ups'), part(e.squats, 'squats')].filter(Boolean).join(', ') || 'none') :
     e.kind === 'machine' ? 'Machine' + (e.from ? ' (in session)' : '') + ': ' + e.made + ' of ' + e.of + ' solid' : e.kind === 'game' ? 'Game: ' + e.h + ' for ' + e.ab + ', ' + e.k + ' K, ' + e.bb + ' BB' :
     e.kind === 'pitch' ? 'Pitched: ' + e.pitches + ' pitches, ' + L.fmtInnings(e.outs || 0) + ' innings' : e.kind === 'strength' ? 'Test: jump ' + fix(e.jump, 0) + ' in, ' + fix(e.pushups, 0) + ' push-ups, plank ' + fix(e.plank, 0) + ' sec' :
-    e.kind === 'session' ? 'Session ' + e.slot + ' (' + ((L.FOCUS[e.focus] || {}).name || e.focus) + ')' : e.kind === 'analysis' ? 'Filmstrip: ' + (str(e.fix && e.fix.title, 60) || 'no note') : e.kind;
+    e.kind === 'session' ? (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'Session') + ' (' + ((L.FOCUS[e.focus] || {}).name || e.focus) + ')' : e.kind === 'analysis' ? 'Filmstrip: ' + (str(e.fix && e.fix.title, 60) || 'no note') : e.kind;
   return page(strip('Log ' + who() + "'s work", 'Finished sessions log their own reps. Use this for extra work, speeds and games.'),
     h('section', { class: 'sec plain' }, h('div', { class: 'row between' }, h('h2', null, 'Today'), h('div', { style: 'flex:0 1 200px' }, inp('q_date', 'Date', { type: 'date', def: t }))),
       h('h3', null, 'Extra reps (outside sessions)'),

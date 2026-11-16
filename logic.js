@@ -254,9 +254,9 @@ const HubLogic = (() => {
       I('z5', 'Plank', '2 holds of ' + hold + ' seconds.'),
       I('z6', 'Big jumps', '5 big jumps. Stick every landing.')] };
     return {
-      A: { title: 'Session A', sub: 'Hit + bodyweight', min: 25, blocks: [warm, hit, bodyA, log] },
-      B: { title: 'Session B', sub: 'Hit + Tidal Tank', min: 25, blocks: [warm, hit, bodyB, log] },
-      C: { title: 'Session C', sub: 'No gear', min: 10, blocks: [bodyC] }
+      A: { title: 'Day 1', sub: 'Hitting + push-ups', min: 25, blocks: [warm, hit, bodyA, log] },
+      B: { title: 'Day 2', sub: 'Hitting + Tidal Tank', min: 25, blocks: [warm, hit, bodyB, log] },
+      C: { title: 'Day 3', sub: 'Bodyweight only', min: 10, blocks: [bodyC] }
     };
   }
 
@@ -316,7 +316,7 @@ const HubLogic = (() => {
   }
   function recapText(r, name) {
     const out = [(name || 'Player') + ', week of ' + short(r.mon) + ' to ' + short(r.sun)];
-    out.push('Sessions: ' + r.sessions.length + ' of 3' + (r.sessions.length ? ' (' + r.sessions.join(', ') + ')' : ''));
+    out.push('Sessions: ' + r.sessions.length + ' of 3' + (r.sessions.length ? ' (' + r.sessions.map(s => ({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[s] || s).join(', ') + ')' : ''));
     const parts = [[r.reps.swings, 'swings'], [r.reps.squats, 'squats'], [r.reps.pushups, 'push-ups'], [r.reps.situps, 'sit-ups']].filter(x => x[0] > 0).map(x => x[0] + ' ' + x[1]);
     out.push('Reps: ' + (parts.join(', ') || 'none logged'));
     if (r.of > 0) out.push('Machine contact: ' + r.made + ' ÷ ' + r.of + ' = ' + Math.round(r.made / r.of * 100) + '%');
