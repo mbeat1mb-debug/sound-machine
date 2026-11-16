@@ -1,0 +1,14 @@
+{
+ "name": "Dugout Hub",
+ "short_name": "Dugout",
+ "display": "standalone",
+ "background_color": "#93cff2",
+ "theme_color": "#93cff2",
+ "icons": [
+  {
+   "src": "icon-180.png",
+   "sizes": "180x180",
+   "type": "image/png"
+  }
+ ]
+}
