@@ -130,13 +130,14 @@ const HubLogic = (() => {
 
   // Every tracked best, and how many times a best was beaten (the first value does not count).
   function records(entries) {
-    const r = { bat: null, exit: null, contact: null, jump: null, pushups: null, plank: null };
+    const r = { bat: null, exit: null, contact: null, jump: null, pushups: null, plank: null, velo: null };
     let breaks = 0;
     const up = (k, v, e, extra) => { if (!isNum(v)) return; if (!r[k]) r[k] = Object.assign({ v, date: e.date }, extra); else if (v > r[k].v) { r[k] = Object.assign({ v, date: e.date }, extra); breaks++; } };
     for (const e of entries.slice().sort(byDate)) {
       if (e.kind === 'swing') { up('bat', e.batMax != null ? e.batMax : e.batSpeed, e); if (e.ball !== 'mini') up('exit', e.exitMax != null ? e.exitMax : e.exitVelo, e); }
       if (e.kind === 'machine' && e.of >= 10) up('contact', e.made / e.of, e, { made: e.made, of: e.of });
       if (e.kind === 'strength') { up('jump', e.jump, e); up('pushups', e.pushups, e); up('plank', e.plank, e); }
+      if (e.kind === 'velo') up('velo', isNum(e.max) ? e.max : e.avg, e);
     }
     r.breaks = breaks;
     return r;
@@ -294,7 +295,7 @@ const HubLogic = (() => {
 
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const short = s => MON[parse(s).getUTCMonth()] + ' ' + parse(s).getUTCDate();
-  const REC_NAMES = { bat: 'top bat speed', exit: 'top exit speed', contact: 'best machine round', jump: 'long jump', pushups: 'push-up test', plank: 'plank' };
+  const REC_NAMES = { bat: 'top bat speed', exit: 'top exit speed', contact: 'best machine round', jump: 'long jump', pushups: 'push-up test', plank: 'plank', velo: 'top pitch speed' };
   function weekRecap(entries, today) {
     const mon = mondayOf(today), sun = addDays(mon, 6), wk = entries.filter(e => e.date >= mon && e.date <= sun);
     const slots = {}; for (const e of wk) if (e.kind === 'session' && e.complete && ['A', 'B', 'C'].indexOf(e.slot) >= 0) slots[e.slot] = true;
@@ -309,11 +310,15 @@ const HubLogic = (() => {
       batN: sw.length, batAvg: avg(sw.map(e => e.batSpeed)), batBest: sw.length ? Math.max.apply(null, sw.map(e => isNum(e.batMax) ? e.batMax : e.batSpeed)) : null,
       games: { n: g.length, ab: sum(g, 'ab'), h: sum(g, 'h'), k: sum(g, 'k'), bb: sum(g, 'bb') },
       pitch: { n: pt.length, pitches: sum(pt, 'pitches'), outs: sum(pt, 'outs') },
+      velo: (function () { const v = wk.filter(e => e.kind === 'velo'), a = v.filter(e => isNum(e.avg)).map(e => e.avg), m = v.map(e => isNum(e.max) ? e.max : e.avg).filter(isNum);
+        return { n: v.length, avg: a.length ? avg(a) : null, aN: a.length, max: m.length ? Math.max.apply(null, m) : null }; })(),
+      body: wk.filter(e => e.kind === 'body').sort(byDate).pop() || null,
       checks: ck.length, lastFix: ck.length && ck[ck.length - 1].fix && typeof ck[ck.length - 1].fix.title === 'string' ? ck[ck.length - 1].fix.title.slice(0, 60) : '',
       newRecords: Object.keys(REC_NAMES).filter(k => before[k] && after[k] && after[k].v > before[k].v).map(k => REC_NAMES[k]),
       next: decideFocus(stats(entries, nextMon), entries, nextMon, tune(entries, nextMon).rules)
     };
   }
+  function fmtHeight(inches) { const f = Math.floor(inches / 12), i = Math.round((inches - f * 12) * 10) / 10; return f + ' ft ' + i + ' in'; }
   function recapText(r, name) {
     const out = [(name || 'Player') + ', week of ' + short(r.mon) + ' to ' + short(r.sun)];
     out.push('Sessions: ' + r.sessions.length + ' of 3' + (r.sessions.length ? ' (' + r.sessions.map(s => ({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[s] || s).join(', ') + ')' : ''));
@@ -323,6 +328,8 @@ const HubLogic = (() => {
     if (r.batN) out.push('Bat speed: average ' + r.batAvg.toFixed(1) + ' mph from ' + r.batN + (r.batN === 1 ? ' entry' : ' entries') + ', best ' + r.batBest.toFixed(1) + ' mph');
     if (r.games.n) out.push('Games: ' + r.games.h + ' for ' + r.games.ab + ', ' + r.games.k + (r.games.k === 1 ? ' strikeout, ' : ' strikeouts, ') + r.games.bb + (r.games.bb === 1 ? ' walk' : ' walks'));
     if (r.pitch.n) out.push('Pitching: ' + r.pitch.n + (r.pitch.n === 1 ? ' outing, ' : ' outings, ') + r.pitch.pitches + ' pitches, ' + fmtInnings(r.pitch.outs) + ' innings');
+    if (r.velo && r.velo.n) out.push('Pitch speed: ' + (r.velo.avg != null ? 'average ' + r.velo.avg.toFixed(1) + ' mph from ' + r.velo.aN + (r.velo.aN === 1 ? ' check, ' : ' checks, ') : '') + 'fastest ' + r.velo.max.toFixed(1) + ' mph');
+    if (r.body) out.push('Measured: ' + [isNum(r.body.heightIn) ? fmtHeight(r.body.heightIn) : null, isNum(r.body.weightLb) ? r.body.weightLb + ' lb' : null].filter(Boolean).join(', '));
     if (r.checks) out.push('Filmstrips: ' + r.checks + (r.lastFix ? '. Latest note: ' + r.lastFix : ''));
     if (r.newRecords.length) out.push('New records: ' + r.newRecords.join(', '));
     out.push('Likely focus next week: ' + FOCUS[r.next.focus].name + '. ' + r.next.why);
@@ -330,6 +337,6 @@ const HubLogic = (() => {
   }
 
   return { parse, iso, addDays, diffDays, mondayOf, avg, isNum, byDate, pctVsGame, fitStatus, restDays, fmtInnings, outsFromInnings, armStatus, stats,
-    decideFocus, weekInfo, streak, longestStreak, records, totals, game, badges, retest, buildWeek, hitting, sessionReps, tune, fixRun, weekRecap, recapText, HEAVY_CAP, FOCUS, RULES, XP, TITLES };
+    decideFocus, weekInfo, streak, longestStreak, records, totals, game, badges, retest, buildWeek, hitting, sessionReps, tune, fixRun, weekRecap, recapText, fmtHeight, HEAVY_CAP, FOCUS, RULES, XP, TITLES };
 })();
 /*LOGIC-END*/

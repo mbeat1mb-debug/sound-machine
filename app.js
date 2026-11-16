@@ -460,7 +460,7 @@ function viewFilm() {
 function viewTrophies() {
   const B = L.badges(state.entries), rec = L.records(state.entries), t = L.totals(state.entries);
   const recs = [['Top bat speed', rec.bat, r => fix(r.v) + ' mph'], ['Top exit speed', rec.exit, r => fix(r.v) + ' mph'], ['Best machine round', rec.contact, r => r.made + ' of ' + r.of],
-    ['Longest jump', rec.jump, r => fix(r.v, 0) + ' in'], ['Most push-ups in a test', rec.pushups, r => fix(r.v, 0)], ['Longest plank', rec.plank, r => fix(r.v, 0) + ' sec']];
+    ['Longest jump', rec.jump, r => fix(r.v, 0) + ' in'], ['Most push-ups in a test', rec.pushups, r => fix(r.v, 0)], ['Longest plank', rec.plank, r => fix(r.v, 0) + ' sec'], ['Fastest pitch', rec.velo, r => fix(r.v) + ' mph']];
   return page(strip('Trophies', B.filter(b => b.on).length + ' of ' + B.length + ' badges earned'),
     h('section', { class: 'sec plain' }, h('div', { class: 'patches' }, B.map(b => h('div', { class: 'patch' + (b.on ? ' on' : '') }, h('div', { class: 'ring' }, icon(b.icon)), h('b', null, b.name), h('span', null, b.on ? 'Earned' : b.how))))),
     h('div', { class: 'two even' },
@@ -492,7 +492,9 @@ function viewLog() {
     e.kind === 'reps' ? (e.from ? 'Reps from ' + (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'a session') + ': ' : 'Extra reps: ') + ([part(e.swings, 'swings'), part(e.pushups, 'push-ups'), part(e.situps, 'sit-ups'), part(e.squats, 'squats')].filter(Boolean).join(', ') || 'none') :
     e.kind === 'machine' ? 'Machine' + (e.from ? ' (in session)' : '') + ': ' + e.made + ' of ' + e.of + ' solid' : e.kind === 'game' ? 'Game: ' + e.h + ' for ' + e.ab + ', ' + e.k + ' K, ' + e.bb + ' BB' :
     e.kind === 'pitch' ? 'Pitched: ' + e.pitches + ' pitches, ' + L.fmtInnings(e.outs || 0) + ' innings' : e.kind === 'strength' ? 'Test: jump ' + fix(e.jump, 0) + ' in, ' + fix(e.pushups, 0) + ' push-ups, plank ' + fix(e.plank, 0) + ' sec' :
-    e.kind === 'session' ? (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'Session') + ' (' + ((L.FOCUS[e.focus] || {}).name || e.focus) + ')' : e.kind === 'analysis' ? 'Filmstrip: ' + (str(e.fix && e.fix.title, 60) || 'no note') : e.kind;
+    e.kind === 'session' ? (({ A: 'Day 1', B: 'Day 2', C: 'Day 3' })[e.slot] || 'Session') + ' (' + ((L.FOCUS[e.focus] || {}).name || e.focus) + ')' : e.kind === 'analysis' ? 'Filmstrip: ' + (str(e.fix && e.fix.title, 60) || 'no note') :
+    e.kind === 'velo' ? 'Pitch speed' + (e.where === 'game' ? ' (game)' : '') + ': ' + [L.isNum(e.avg) ? 'average ' + fix(e.avg) : null, L.isNum(e.max) ? 'fastest ' + fix(e.max) : null].filter(Boolean).join(', ') + ' mph' :
+    e.kind === 'body' ? 'Measured: ' + [L.isNum(e.heightIn) ? L.fmtHeight(e.heightIn) : null, L.isNum(e.weightLb) ? fix(e.weightLb) + ' lb' : null].filter(Boolean).join(', ') : e.kind;
   return page(strip('Log ' + who() + "'s work", 'Finished sessions log their own reps. Use this for extra work, speeds and games.'),
     h('section', { class: 'sec plain' }, h('div', { class: 'row between' }, h('h2', null, 'Today'), h('div', { style: 'flex:0 1 200px' }, inp('q_date', 'Date', { type: 'date', def: t }))),
       h('h3', null, 'Extra reps (outside sessions)'),
@@ -518,7 +520,19 @@ function viewLog() {
         h('div', null, h('button', { type: 'button', class: 'btn', onclick: guard(async () => {
           if (num('t_jump') == null && num('t_push') == null && num('t_plank') == null) return toast('Enter at least one test result.');
           if (await addEntry({ kind: 'strength', date: state.form.t_date || t, jump: num('t_jump'), pushups: num('t_push'), plank: num('t_plank') })) { clear('t_jump', 't_push', 't_plank'); toast('Test saved.'); } render(); }) }, 'Save test')),
-        h('p', { class: 'small mid' }, 'Every 4 weeks. These are max-effort tests, separate from daily reps.'))),
+        h('p', { class: 'small mid' }, 'Every 4 weeks. These are max-effort tests, separate from daily reps.')),
+      h('section', { class: 'sec' }, h('h2', null, 'Height and weight'),
+        h('div', { class: 'row' }, inp('b_date', 'Date', { type: 'date', def: t })),
+        h('div', { class: 'row' }, inp('b_ft', 'Height, feet', { mode: 'numeric' }), inp('b_in', 'and inches'), inp('b_lb', 'Weight (lb)')),
+        h('div', null, h('button', { type: 'button', class: 'btn', onclick: guard(async () => {
+          const ft = num('b_ft'), inch = num('b_in'), lb = num('b_lb');
+          const hIn = ft == null && inch == null ? null : (ft || 0) * 12 + (inch || 0);
+          if (hIn == null && lb == null) return toast('Enter his height, weight, or both.');
+          if (inch != null && inch >= 12) return toast('Inches should be under 12. Put whole feet in the feet box.');
+          if (hIn != null && (hIn < 30 || hIn > 84)) return toast('That height looks off. Check feet and inches.');
+          if (lb != null && (lb < 20 || lb > 300)) return toast('That weight looks off. Check it is in pounds.');
+          if (await addEntry({ kind: 'body', date: state.form.b_date || t, heightIn: hIn, weightLb: lb })) { clear('b_ft', 'b_in', 'b_lb'); toast('Saved.'); } render(); }) }, 'Save height and weight')),
+        h('p', { class: 'small mid' }, 'Once a month is plenty: same scale, shoes off, morning. Growth shows on the Progress screen.'))),
     h('section', { class: 'sec' }, h('h2', null, 'Recent entries'),
       recent.length ? recent.map(e => h('div', { class: 'entry' }, h('span', null, h('span', { class: 'mid num' }, fmtDate(e.date) + ': '), label(e)), delBtn(e))) : h('p', { class: 'mid' }, 'Nothing logged yet.')));
 }
@@ -554,6 +568,16 @@ function viewArm() {
         h('p', { class: 'num' }, L.fmtInnings(a.outs12) + ' of 80 innings in the last 12 months (' + Math.round(yr * 100) + '%)'),
         h('div', { class: 'bar', role: 'img', 'aria-label': Math.round(yr * 100) + ' percent of the yearly innings limit' }, h('i', { style: 'width:' + Math.min(100, yr * 100).toFixed(1) + '%' })),
         h('p', { class: 'math' }, a.outs12 + ' outs ÷ 3 = ' + (a.outs12 / 3).toFixed(1) + ' innings; ' + (a.outs12 / 3).toFixed(1) + ' ÷ 80 = ' + (yr * 100).toFixed(1) + '%'))),
+    h('section', { class: 'sec' }, h('h2', null, 'Pitch speed'),
+      h('div', { class: 'row' }, inp('v_date', 'Date', { type: 'date', def: t }), inp('v_avg', 'Average (mph)'), inp('v_max', 'Fastest (mph)'), inp('v_n', 'Pitches timed', { mode: 'numeric' }),
+        sel('v_where', 'Where', [['bullpen', 'Practice'], ['game', 'Game']], 'bullpen')),
+      h('div', null, h('button', { type: 'button', class: 'btn', onclick: guard(async () => {
+        const av = num('v_avg'), mx = num('v_max');
+        if (av == null && mx == null) return toast('Enter the average or the fastest pitch.');
+        if ([av, mx].some(v => v != null && (v < 10 || v > 100))) return toast('That speed looks off. Check it is in miles per hour.');
+        if (av != null && mx != null && mx < av) return toast('Fastest cannot be lower than the average.');
+        if (await addEntry({ kind: 'velo', date: state.form.v_date || t, avg: av, max: mx, n: num('v_n'), where: state.form.v_where || 'bullpen' })) { clear('v_avg', 'v_max', 'v_n'); toast('Pitch speed saved.'); } render(); }) }, 'Save pitch speed')),
+      h('p', { class: 'small mid' }, 'Use the radar from behind the catcher or the side, the same spot each time. Speed checks do not count toward his pitch limits, so log real pitch counts as an outing above. The chart is on the Progress screen.')),
     h('section', { class: 'sec' }, h('h2', null, 'The rules it follows'),
       h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, h('th', null, 'Pitches in a day'), h('th', { class: 'r' }, 'Rest days'))),
         h('tbody', null, rows.map(r => h('tr', null, h('td', { class: 'num' }, r[0]), h('td', { class: 'r' }, r[1])))))),
@@ -592,6 +616,23 @@ function viewProgress() {
       tile('Exit speed, real balls (mph)', fix(s.exitRecent), 'mph', series(e => e.ball !== 'mini' ? e.exitVelo : null)),
       tile('Squared-up score', fix(s.squareRecent, 2), 'ratio', series(e => (e.ball !== 'mini' && L.isNum(e.batSpeed) && L.isNum(e.exitVelo) && e.batSpeed > 0) ? e.exitVelo / e.batSpeed : null), 'Exit speed ÷ bat speed. His best: ' + fix(s.squareBest, 2) + '.'),
       tile('Machine contact', pcs(s.contactRate), 'percent', mach, s.contactOf ? s.contactMade + ' ÷ ' + s.contactOf + ' = ' + pcs(s.contactRate) : null),
+      (function () {
+        const v = state.entries.filter(e => e.kind === 'velo').sort(L.byDate), top = e => L.isNum(e.max) ? e.max : e.avg;
+        const pts = v.map(e => ({ date: e.date, v: top(e) })).filter(x => L.isNum(x.v)), a = pts[0], z = pts[pts.length - 1], best = L.records(state.entries).velo;
+        return tile('Pitch speed, fastest (mph)', z ? fix(z.v) : '–', 'mph', pts,
+          pts.length > 1 ? fix(z.v) + ' − ' + fix(a.v) + ' = ' + (z.v - a.v >= 0 ? '+' : '') + fix(z.v - a.v) + ' mph since ' + fmtDate(a.date) + '. Best ever: ' + fix(best.v) + ' mph.' : 'Log speeds on the Arm screen.');
+      })(),
+      (function () {
+        const b = state.entries.filter(e => e.kind === 'body').sort(L.byDate);
+        const ser = k => b.filter(e => L.isNum(e[k])).map(e => ({ date: e.date, v: e[k] }));
+        const grow = (pts, show, u) => { if (pts.length < 2) return null; const a = pts[0], z = pts[pts.length - 1], d = z.v - a.v, days = (Date.parse(z.date) - Date.parse(a.date)) / 864e5;
+          return show(z.v) + ' − ' + show(a.v) + ' = ' + (d >= 0 ? '+' : '') + fix(d) + ' ' + u + ' over ' + Math.round(days) + ' days' + (days >= 60 ? '; ' + fix(d) + ' ÷ ' + Math.round(days) + ' × 365 = ' + (d >= 0 ? '+' : '') + fix(d / days * 365) + ' ' + u + ' a year' : ''); };
+        const hs = ser('heightIn'), ws = ser('weightLb'), hz = hs[hs.length - 1], wz = ws[ws.length - 1];
+        return h('section', { class: 'sec' }, h('h2', null, 'Growth'),
+          h('h3', null, 'Height'), h('b', { class: 'bigv' }, hz ? L.fmtHeight(hz.v) : '–'), grow(hs, x => fix(x) + ' in', 'in') ? h('span', { class: 'math' }, grow(hs, x => fix(x) + ' in', 'in')) : null, spark(hs, 'inches'),
+          h('h3', null, 'Weight'), h('b', { class: 'bigv' }, wz ? fix(wz.v) + ' lb' : '–'), grow(ws, x => fix(x) + ' lb', 'lb') ? h('span', { class: 'math' }, grow(ws, x => fix(x) + ' lb', 'lb')) : null, spark(ws, 'pounds'),
+          h('p', { class: 'small mid' }, 'Log on the Log screen. When he grows, recheck his bat length and weight on the Gear screen.'));
+      })(),
       h('section', { class: 'sec' }, h('h2', null, 'Reps'),
         h('table', null, h('thead', null, h('tr', null, h('th', null, ''), h('th', { class: 'r' }, 'Last 28 days'), h('th', { class: 'r' }, 'All time'))),
           h('tbody', null, [['Swings', 'swings'], ['Push-ups', 'pushups'], ['Sit-ups', 'situps'], ['Squats', 'squats'], ['Sessions', 'sessions']].map(r =>
